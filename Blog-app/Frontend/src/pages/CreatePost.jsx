@@ -1,7 +1,9 @@
+
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { ImCross } from "react-icons/im";
-import { useContext, useState } from "react";
+import { FiUpload, FiImage, FiEdit3, FiSave, FiPlus } from "react-icons/fi";
+import { useContext, useState, useRef } from "react";
 import { UserContext } from "../context/UserContext";
 import axios from "axios";
 import { URL } from "../url";
@@ -11,131 +13,283 @@ const CreatePost = () => {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const { user } = useContext(UserContext);
   const [cat, setCat] = useState("");
   const [cats, setCats] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const fileInputRef = useRef(null);
 
   const navigate = useNavigate();
 
-  const addCategory = () => {
-    let updatedCats = [...cats];
-    updatedCats.push(cat);
-    setCat("");
-    setCats(updatedCats);
+  const validateForm = () => {
+    const newErrors = {};
+    if (!title.trim()) newErrors.title = "Title is required";
+    if (!desc.trim()) newErrors.desc = "Description is required";
+    if (title.length > 100) newErrors.title = "Title must be less than 100 characters";
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const deleteCategory = (i) => {
-    let updatedCats = [...cats];
-    updatedCats.splice(i);
-    setCats(updatedCats);
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      if (selectedFile.size > 5 * 1024 * 1024) { // 5MB limit
+        setErrors(prev => ({ ...prev, file: "File size must be less than 5MB" }));
+        return;
+      }
+      
+      setFile(selectedFile);
+      setErrors(prev => ({ ...prev, file: "" }));
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviewUrl(e.target.result);
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  const removeImage = () => {
+    setFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const addCategory = () => {
+    if (cat.trim() && !cats.includes(cat.trim()) && cats.length < 5) {
+      setCats(prev => [...prev, cat.trim()]);
+      setCat("");
+    }
+  };
+
+  const deleteCategory = (index) => {
+    setCats(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCategory();
+    }
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    
+    if (!validateForm()) return;
+    
+    setIsLoading(true);
 
     const post = {
-      title,
-      desc,
+      title: title.trim(),
+      desc: desc.trim(),
       username: user.username,
       userId: user._id,
       categories: cats,
     };
 
-    if (file) {
-      const data = new FormData();
-      const filename = Date.now() + file.name;
-      data.append("img", filename);
-      data.append("file", file);
-      post.photo = filename;
-
-      //img upload
-      try {
-        const imgUpload = await axios.post(URL + "/api/upload", data);
-      } catch (err) {
-        console.log(err);
-      }
-    }
-
-    //post upload
     try {
+      if (file) {
+        const data = new FormData();
+        const filename = Date.now() + file.name;
+        data.append("img", filename);
+        data.append("file", file);
+        post.photo = filename;
+
+        await axios.post(URL + "/api/upload", data);
+      }
+
       const res = await axios.post(URL + "/api/posts/create", post, {
         withCredentials: true,
       });
+      
       navigate("/posts/post/" + res.data._id);
     } catch (err) {
       console.log(err);
+      setErrors({ submit: "Failed to create post. Please try again." });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <Navbar />
-      <div className="px-6 md:px-[200px] mt-8">
-        <h1 className="font-bold md:text-2xl text-xl mt-8">Create a post</h1>
-        <form className="w-full flex flex-col space-y-4 md:space-y-8 mt-4">
-          <input
-            onChange={(e) => setTitle(e.target.value)}
-            type="text"
-            placeholder="Enter post title"
-            className="px-4 py-2 outline-none"
-          />
-          <input
-            onChange={(e) => setFile(e.target.files[0])}
-            type="file"
-            className="px-4 py-2 "
-          />
-          <div className="flex flex-col ">
-            <div className="flex flex items-center space-x-4 md:space-x-8">
+      
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+            <FiEdit3 className="w-8 h-8 text-blue-600" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Post</h1>
+          <p className="text-gray-600">Share your thoughts with the world</p>
+        </div>
+
+        {/* Main Form Container */}
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <form onSubmit={handleCreate} className="space-y-6">
+            
+            {/* Title Section */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                Post Title *
+              </label>
               <input
-                value={cat}
-                onChange={(e) => setCat(e.target.value)}
-                className="px-4 py-2 outline-none "
-                placeholder="Enter post category"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 type="text"
+                placeholder="Enter an engaging title for your post..."
+                className={`w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.title ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+                maxLength={100}
               />
-              <div
-                onClick={addCategory}
-                className="bg-black text-white px-4 py-2 font-semibold cursor-pointer"
-              >
-                {" "}
-                Add
+              <div className="flex justify-between items-center">
+                {errors.title && <p className="text-red-500 text-sm">{errors.title}</p>}
+                <p className="text-gray-400 text-sm ml-auto">{title.length}/100</p>
               </div>
             </div>
 
-            {/* category*/}
-            <div className="flex px-4 mt-3">
-              {cats?.map((c, i) => (
+            {/* Image Upload Section */}
+            <div className="space-y-4">
+              <label className="block text-sm font-semibold text-gray-700">
+                Featured Image
+              </label>
+              
+              {!previewUrl ? (
                 <div
-                  key={i}
-                  className="flex justify-center items-center space-x-2 mr-4 bg-gray-200 px-2 py-1 rounded-md"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
                 >
-                  <p>{c}</p>
-                  <p
-                    onClick={deleteCategory}
-                    className="text-white bg-black rounded-full cursor-pointer p-1 text-sm"
-                  >
-                    <ImCross />
-                  </p>
+                  <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-2">Click to upload an image</p>
+                  <p className="text-gray-400 text-sm">PNG, JPG up to 5MB</p>
                 </div>
-              ))}
+              ) : (
+                <div className="relative">
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    className="w-full h-64 object-cover rounded-lg shadow-md"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute top-3 right-3 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors duration-200 shadow-lg"
+                  >
+                    <ImCross className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              
+              <input
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                type="file"
+                accept="image/*"
+                className="hidden"
+              />
+              {errors.file && <p className="text-red-500 text-sm">{errors.file}</p>}
             </div>
-          </div>
-          <textarea
-            onChange={(e) => setDesc(e.target.value)}
-            row={15}
-            cols={30}
-            className="px-4 py-2 outline-none"
-            placeholder="Enter post description"
-            name=""
-            id=""
-          ></textarea>
-          <button
-            onClick={handleCreate}
-            className=" flex justify-center bg-black w-full md:w-[20%] mx-auto text-white font-semibold px-4 py-2 md:text-xl text-lg"
-          >
-            <p> Create </p>
-          </button>
-        </form>
+
+            {/* Categories Section */}
+            <div className="space-y-4">
+              <label className="block text-sm font-semibold text-gray-700">
+                Categories
+              </label>
+              
+              <div className="flex gap-3">
+                <input
+                  value={cat}
+                  onChange={(e) => setCat(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="flex-1 px-4 py-2 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Add a category..."
+                  type="text"
+                />
+                <button
+                  type="button"
+                  onClick={addCategory}
+                  disabled={!cat.trim() || cats.length >= 5}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 flex items-center gap-2"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  Add
+                </button>
+              </div>
+
+              {/* Category Tags */}
+              {cats.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {cats.map((c, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 px-3 py-2 rounded-full text-sm border border-blue-200"
+                    >
+                      <span>{c}</span>
+                      <button
+                        type="button"
+                        onClick={() => deleteCategory(i)}
+                        className="text-blue-600 hover:text-red-500 transition-colors duration-200"
+                      >
+                        <ImCross className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <p className="text-gray-400 text-sm">Add up to 5 categories ({cats.length}/5)</p>
+            </div>
+
+            {/* Description Section */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                Post Content *
+              </label>
+              <textarea
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                rows={12}
+                className={`w-full px-4 py-3 rounded-lg border-2 resize-none transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.desc ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+                placeholder="Write your post content here... Share your story, insights, or thoughts with the community."
+              />
+              {errors.desc && <p className="text-red-500 text-sm">{errors.desc}</p>}
+            </div>
+
+            {/* Submit Button */}
+            <div className="pt-6">
+              {errors.submit && (
+                <p className="text-red-500 text-sm mb-4 text-center">{errors.submit}</p>
+              )}
+              
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 px-8 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg hover:shadow-xl"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <FiSave className="w-5 h-5" />
+                    Publish Post
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
       <Footer />

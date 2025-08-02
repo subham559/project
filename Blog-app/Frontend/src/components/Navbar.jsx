@@ -4,6 +4,7 @@ import { FaBars } from "react-icons/fa6";
 import { useContext, useState } from "react";
 import Menu from "./Menu";
 import { UserContext } from "../context/UserContext";
+import logo from "../assets/logo.svg";
 
 const Navbar = () => {
 
@@ -25,11 +26,11 @@ const showMenu=()=>{
   return (
     <div className="flex items-center justify-between px-6 md:px-[200px] py-4">
       <h1 className=" text-lg text-xl font-extrabold">
-        <Link to="/"> Blog MITS</Link>
+        <Link to="/"><img src={logo} alt="logo" className="w-30 sm:w-44 cursor-pointer" /></Link>
       </h1>
   
         {path==="/"&& <div className="flex justify-center items-center space-x-0">
-          <p onClick={()=>navigate(prompt?"?search="+prompt:navigate("/"))} className="cursor-pointer">
+          <p onClick={()=>navigate(prompt?"?search="+prompt:navigate("/"))} className="cursor-pointer ">
             <FaSearch />
           </p>
           <input onChange={(e)=>setPrompt(e.target.value)}
